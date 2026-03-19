@@ -164,6 +164,16 @@
 </div>
 
 <div id="pantalla-app">
+  <div id="modal-confirm" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;padding:1.75rem;width:calc(100% - 2rem);max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <p id="confirm-msg" style="font-size:15px;margin-bottom:1.25rem;line-height:1.5;color:#111"></p>
+      <div style="display:flex;gap:8px">
+        <button id="confirm-si" onclick="resolveConfirm(true)" style="flex:1;padding:10px;border-radius:8px;font-size:14px;cursor:pointer;background:#a32d2d;color:#fff;border:none;font-family:inherit;font-weight:500">Eliminar</button>
+        <button id="confirm-no" onclick="resolveConfirm(false)" style="flex:1;padding:10px;border-radius:8px;font-size:14px;cursor:pointer;background:#fff;color:#111;border:1px solid #ccc;font-family:inherit">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="topbar">
     <p class="topbar-title">Cobranzas</p>
     <div style="display:flex;gap:8px">
@@ -173,8 +183,8 @@
   </div>
 
   <!-- CONFIG API KEY -->
-  <div id="modal-api" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:14px;padding:2rem;width:100%;max-width:420px;margin:1rem">
+  <div id="modal-api" style="display:none;margin-bottom:1rem">
+    <div style="background:#fff;border:1px solid #e5e5e5;border-radius:14px;padding:2rem">
       <p style="font-size:16px;font-weight:600;margin-bottom:6px">Clave API de Anthropic</p>
       <p style="font-size:13px;color:#666;margin-bottom:1.25rem">Necesaria para leer facturas PDF automáticamente. Se guarda solo en este navegador.</p>
       <div class="form-group">
@@ -434,16 +444,6 @@
   </div>
 
   <!-- CONFIRM MODAL -->
-  <div id="modal-confirm" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:300;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:14px;padding:1.75rem;width:100%;max-width:340px;margin:1rem">
-      <p id="confirm-msg" style="font-size:15px;margin-bottom:1.25rem;line-height:1.5"></p>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" style="flex:1" id="confirm-ok">Eliminar</button>
-        <button class="btn" style="flex:1" onclick="resolveConfirm(false)">Cancelar</button>
-      </div>
-    </div>
-  </div>
-
   <!-- EXPORTAR -->
   <div id="tab-calendario" class="section">
     <div class="card">
@@ -600,12 +600,15 @@ function confirmar(msg){
     _confirmResolve=resolve;
     document.getElementById('confirm-msg').textContent=msg;
     document.getElementById('modal-confirm').style.display='flex';
-    document.getElementById('confirm-ok').onclick=()=>resolveConfirm(true);
   });
 }
 function resolveConfirm(val){
   document.getElementById('modal-confirm').style.display='none';
-  if(_confirmResolve){_confirmResolve(val);_confirmResolve=null;}
+  if(_confirmResolve){
+    const fn=_confirmResolve;
+    _confirmResolve=null;
+    fn(val);
+  }
 }
 function cerrarSesion(){
   localStorage.removeItem(PASS_KEY);
