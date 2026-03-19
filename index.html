@@ -66,6 +66,7 @@ input,select,button,textarea{font-family:inherit}
 /* BADGES */
 .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:500}
 .b-warn{background:#faeeda;color:#854f0b}
+.b-orange{background:#f5dcc8;color:#6b3000}
 .b-danger{background:#fcebeb;color:#a32d2d}
 .b-ok{background:#eaf3de;color:#3b6d11}
 .b-info{background:#e6f1fb;color:#185fa5}
@@ -997,6 +998,10 @@ function marcarCobrado(vid,cidx){
 // ─────────────────────────────────────────────
 // HISTORIAL
 // ─────────────────────────────────────────────
+function getSaldoPagado(ventaId){
+  return G.recibos.reduce((s,r)=>s+(r.asignaciones||[]).filter(a=>a.ventaId===ventaId).reduce((ss,a)=>ss+a.monto,0),0);
+}
+
 function renderHistorial(){
   // Ventas agrupadas por cliente
   const pc={};
@@ -1017,7 +1022,17 @@ function renderHistorial(){
           const cbs=(v.cheques||[]).map(ch=>`<span class="badge ${ch.cobrado?'b-ok':'b-warn'}">${ch.cobrado?'✓ ':''}${fmtFecha(ch.fecha)} · $${fmtUSD(ch.monto)}</span>`).join(' ');
           det=`<span class="badge b-purple">Cheque</span> ${v.chequesRecibidos?'<span class="badge b-ok">Cheques recibidos</span>':''} ${cbs}`;
         }else{
-          det=`<span class="badge b-info">Transf./Efectivo · ${v.plazo||25}d</span> <span class="badge ${v.cobrado?'b-ok':'b-warn'}">${v.cobrado?'✓ Cobrado':`Notif. ${fmtFecha(addDias(v.fecha,v.plazo||25))}`}</span>`;
+          const pagado=getSaldoPagado(v.id);
+          const saldo=parseFloat((v.monto-pagado).toFixed(2));
+          let estadoBadge='';
+          if(v.cobrado){
+            estadoBadge=`<span class="badge b-ok">✓ Cobrado</span>`;
+          } else if(pagado>0.01){
+            estadoBadge=`<span class="badge b-warn">Pago parcial · Saldo: USD $${fmtUSD(saldo)}</span>`;
+          } else {
+            estadoBadge=`<span class="badge b-orange">Notif. ${fmtFecha(addDias(v.fecha,v.plazo||25))}</span>`;
+          }
+          det=`<span class="badge b-info">Transf./Efectivo · ${v.plazo||25}d</span> ${estadoBadge}`;
         }
         return`<div class="hrow ${enc?'nc-row':''}">
           <div>
