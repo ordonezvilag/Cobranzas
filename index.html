@@ -414,10 +414,21 @@ input,select,button,textarea{font-family:inherit}
   <!-- HISTORIAL -->
   <div id="sec-historial" class="sec">
     <div class="card">
-      <div id="hist-ventas-wrap">
-        <p class="card-title">Facturas y boletas cargadas</p>
-        <div id="hist-ventas"></div>
+      <div class="fg" style="margin-bottom:.75rem">
+        <label>Buscar cliente</label>
+        <input type="text" id="hist-buscar" placeholder="Nombre o razón social..." oninput="renderHistorial()" style="background:#f9f9f9">
       </div>
+      <div class="filtros">
+        <button class="filtro-btn on" id="hf-todo" onclick="setFiltroHist('todo',this)">Todo</button>
+        <button class="filtro-btn" id="hf-mes" onclick="setFiltroHist('mes',this)">Este mes</button>
+        <button class="filtro-btn" id="hf-anterior" onclick="setFiltroHist('anterior',this)">Mes anterior</button>
+        <button class="filtro-btn" id="hf-6m" onclick="setFiltroHist('6m',this)">Últimos 6 meses</button>
+        <button class="filtro-btn" id="hf-anio" onclick="setFiltroHist('anio',this)">Este año</button>
+      </div>
+    </div>
+    <div class="card">
+      <p class="card-title">Facturas y boletas cargadas</p>
+      <div id="hist-ventas"></div>
     </div>
     <div class="card" style="margin-top:1rem">
       <p class="card-title">Recibos registrados</p>
@@ -484,6 +495,7 @@ let G = {
   pago: 'cheque',
   plazo: 25,
   filtroVentas: 'mes',
+  filtroHist: 'todo',
   chequeCont: 0,
   pendingPDF: null,
   modalCb: null
@@ -1003,9 +1015,14 @@ function getSaldoPagado(ventaId){
 }
 
 function renderHistorial(){
-  // Ventas agrupadas por cliente
+  const buscar=(el('hist-buscar')?.value||'').trim().toLowerCase();
+  const{desde,hasta}=getRangoHist();
+
+  // Ventas agrupadas por cliente con filtros
   const pc={};
   G.ventas.forEach(v=>{
+    if(v.fecha<desde||v.fecha>hasta)return;
+    if(buscar&&!v.cliente.toLowerCase().includes(buscar))return;
     const k=v.cliente.trim().toUpperCase();
     if(!pc[k])pc[k]={nombre:v.cliente,items:[]};
     pc[k].items.push(v);
@@ -1053,9 +1070,11 @@ function renderHistorial(){
     }).join('<div class="sep" style="margin:12px 0"></div>');
   }
 
-  // Recibos agrupados por cliente
+  // Recibos agrupados por cliente con filtros
   const pr={};
   G.recibos.forEach(r=>{
+    if(r.fecha<desde||r.fecha>hasta)return;
+    if(buscar&&!r.cliente.toLowerCase().includes(buscar))return;
     const k=r.cliente.trim().toUpperCase();
     if(!pr[k])pr[k]={nombre:r.cliente,items:[]};
     pr[k].items.push(r);
@@ -1206,6 +1225,20 @@ function guardarRecibo(){
 // ─────────────────────────────────────────────
 // VENTAS
 // ─────────────────────────────────────────────
+function setFiltroHist(f,btn){
+  G.filtroHist=f;
+  document.querySelectorAll('[id^="hf-"]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderHistorial();
+}
+function getRangoHist(){
+  const now=new Date();const y=now.getFullYear();const m=now.getMonth();
+  if(G.filtroHist==='mes')return{desde:`${y}-${String(m+1).padStart(2,'0')}-01`,hasta:hoy()};
+  if(G.filtroHist==='anterior'){const ini=new Date(y,m-1,1);const fin=new Date(y,m,0);return{desde:ini.toISOString().split('T')[0],hasta:fin.toISOString().split('T')[0]};}
+  if(G.filtroHist==='6m'){const ini=new Date(y,m-5,1);return{desde:ini.toISOString().split('T')[0],hasta:hoy()};}
+  if(G.filtroHist==='anio')return{desde:`${y}-01-01`,hasta:hoy()};
+  return{desde:'2000-01-01',hasta:'2099-12-31'};
+}
 function setFiltroVentas(f,btn){
   G.filtroVentas=f;
   document.querySelectorAll('.filtro-btn').forEach(b=>b.classList.remove('on'));
