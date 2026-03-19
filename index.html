@@ -594,21 +594,21 @@ function guardarAPIKey(){
   document.getElementById('api-key-status').style.color='#3b6d11';
   setTimeout(()=>cerrarConfigAPI(),1200);
 }
-let _confirmResolve=null;
-function confirmar(msg){
-  return new Promise(resolve=>{
-    _confirmResolve=resolve;
-    document.getElementById('confirm-msg').textContent=msg;
-    document.getElementById('modal-confirm').style.display='flex';
-  });
+let _pendingDelete={type:null,id:null};
+
+function pedirConfirmacion(type, id, msg){
+  _pendingDelete={type,id};
+  document.getElementById('confirm-msg').textContent=msg;
+  document.getElementById('modal-confirm').style.display='flex';
 }
-function resolveConfirm(val){
+
+async function resolveConfirm(ok){
   document.getElementById('modal-confirm').style.display='none';
-  if(_confirmResolve){
-    const fn=_confirmResolve;
-    _confirmResolve=null;
-    fn(val);
-  }
+  if(!ok){_pendingDelete={type:null,id:null};return;}
+  const {type,id}=_pendingDelete;
+  _pendingDelete={type:null,id:null};
+  if(type==='venta') await _doEliminarVenta(id);
+  if(type==='recibo') await _doEliminarRecibo(id);
 }
 function cerrarSesion(){
   localStorage.removeItem(PASS_KEY);
@@ -838,14 +838,18 @@ async function renderHistorial(){
     return`<p style="font-size:13px;font-weight:600;margin-bottom:8px${ci>0?';margin-top:12px':''}">${c.nombre}</p>${filas}${sep}`;
   }).join('');
 }
-async function eliminarVenta(id){
-  if(!await confirmar('¿Eliminar este registro?'))return;
+function eliminarVenta(id){
+  pedirConfirmacion('venta', id, '¿Eliminar este registro?');
+}
+
+async function _doEliminarVenta(id){
   const vs=await cargarVentas();
   const nuevas=vs.filter(v=>v.id!==id);
   _cacheVentas=nuevas;
-  renderHistorial();
   await sheetGuardar('ventas',VENTAS_HEADERS,nuevas.map(ventaARow));
   _cacheVentas=null;
+  renderHistorial();
+  renderAlertas();
 }
 
 function agregarCheque(){
@@ -1257,8 +1261,11 @@ async function renderHistorialRecibos(){
   }).join('');
 }
 
-async function eliminarRecibo(id){
-  if(!await confirmar('¿Eliminar este recibo? Las facturas asociadas volverán a aparecer como pendientes.'))return;
+function eliminarRecibo(id){
+  pedirConfirmacion('recibo', id, '¿Eliminar este recibo? Las facturas asociadas volverán a aparecer como pendientes.');
+}
+
+async function _doEliminarRecibo(id){
   const recibos=await cargarRecibos();
   const recibo=recibos.find(r=>r.id===id);
   if(recibo){
