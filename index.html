@@ -311,6 +311,7 @@ input,select,button,textarea{font-family:inherit}
           <div class="sel-btn" id="vend-juanmanuel" onclick="setVendedor('juanmanuel')">
             <span class="lbl">Juan Manuel</span><span class="sub">5% / 6.5% según artículo</span>
           </div>
+          <p class="hint" style="grid-column:1/-1;margin-top:4px">Seleccioná el vendedor <strong>antes</strong> de subir el PDF</p>
         </div>
       </div>
 
@@ -682,8 +683,15 @@ function setOrigen(v){
   limpiarForm();
 }
 function setVendedor(v){
+  const cambio=G.vendedor!==v;
   G.vendedor=v;
   ['guillermo','juanmanuel'].forEach(x=>el('vend-'+x).classList.toggle('on',x===v));
+  // Si había un PDF cargado y cambió el vendedor, avisar que hay que volver a subirlo
+  if(cambio&&G.pendingPDF){
+    el('pdf-status').textContent='⚠ Cambiaste el vendedor — volvé a subir el PDF para recalcular la comisión correctamente.';
+    el('pdf-status').style.color='#854f0b';
+    G.pendingPDF=null;
+  }
 }
 function setPago(v){
   G.pago=v;
