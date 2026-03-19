@@ -787,6 +787,27 @@ function guardarVenta(){
   const esBoleta=G.origen==='boleta';
   if(!cliente||!fecha||!monto){alert('Completá cliente, fecha y monto');return;}
 
+  // Validar comisión — obligatoria siempre
+  if(esBoleta){
+    const comVal=parseFloat(el('f-comision').value);
+    if(!comVal||isNaN(comVal)){
+      alert('Ingresá la comisión de la boleta antes de guardar.');
+      el('f-comision').focus();
+      return;
+    }
+  } else {
+    const tieneComision=G.pendingPDF&&(
+      (G.vendedor==='guillermo'&&G.pendingPDF.netoSinIva)||
+      (G.vendedor==='juanmanuel'&&G.pendingPDF.comision!=null)
+    );
+    if(!tieneComision){
+      alert('No se pudo calcular la comisión.\n\nAsegurate de:\n1. Seleccionar el vendedor ANTES de subir el PDF\n2. Volver a subir el PDF si cambiaste el vendedor\n\nNo se puede guardar sin comisión calculada.');
+      el('pdf-status').textContent='⚠ Volvé a subir el PDF con el vendedor correcto seleccionado.';
+      el('pdf-status').style.color='#a32d2d';
+      return;
+    }
+  }
+
   const v={
     id:uid(),cliente,numero,fecha,monto,
     origen:G.origen,vendedor:G.vendedor,
@@ -1132,6 +1153,27 @@ function guardarRecibo(){
   const monto=parseFloat(el('r-monto').value);
   const numero=el('r-numero').value.trim();
   if(!cliente||!fecha||!monto){alert('Completá cliente, fecha y monto');return;}
+
+  // Validar comisión — obligatoria siempre
+  if(esBoleta){
+    const comVal=parseFloat(el('f-comision').value);
+    if(!comVal||isNaN(comVal)){
+      alert('Ingresá la comisión de la boleta antes de guardar.');
+      el('f-comision').focus();
+      return;
+    }
+  } else {
+    const tieneComision=G.pendingPDF&&(
+      (G.vendedor==='guillermo'&&G.pendingPDF.netoSinIva)||
+      (G.vendedor==='juanmanuel'&&G.pendingPDF.comision!=null)
+    );
+    if(!tieneComision){
+      alert('No se pudo calcular la comisión.\n\nAsegurate de:\n1. Seleccionar el vendedor ANTES de subir el PDF\n2. Volver a subir el PDF si cambiaste el vendedor\n\nNo se puede guardar sin comisión calculada.');
+      el('pdf-status').textContent='⚠ Volvé a subir el PDF con el vendedor correcto seleccionado.';
+      el('pdf-status').style.color='#a32d2d';
+      return;
+    }
+  }
 
   const asignaciones=[];
   document.querySelectorAll('[id^="pchk-"]').forEach(chk=>{
