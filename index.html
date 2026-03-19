@@ -433,6 +433,17 @@
     <div id="lista-comisiones"></div>
   </div>
 
+  <!-- CONFIRM MODAL -->
+  <div id="modal-confirm" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:300;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;padding:1.75rem;width:100%;max-width:340px;margin:1rem">
+      <p id="confirm-msg" style="font-size:15px;margin-bottom:1.25rem;line-height:1.5"></p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" id="confirm-ok">Eliminar</button>
+        <button class="btn" style="flex:1" onclick="resolveConfirm(false)">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- EXPORTAR -->
   <div id="tab-calendario" class="section">
     <div class="card">
@@ -518,7 +529,7 @@ async function cargarVentas(){
 }
 async function guardarStorage(ventas){
   _cacheVentas=ventas;
-  await sheetGuardar('ventas',VENTAS_HEADERS,ventas.map(ventaARow));
+  sheetGuardar('ventas',VENTAS_HEADERS,ventas.map(ventaARow));
 }
 async function cargarRecibos(){
   if(_cacheRecibos)return _cacheRecibos;
@@ -527,7 +538,7 @@ async function cargarRecibos(){
 }
 async function guardarRecibos(recibos){
   _cacheRecibos=recibos;
-  await sheetGuardar('recibos',RECIBOS_HEADERS,recibos.map(reciboARow));
+  sheetGuardar('recibos',RECIBOS_HEADERS,recibos.map(reciboARow));
 }
 function invalidarCache(){_cacheVentas=null;_cacheRecibos=null;}
 let origenActual='factura';
@@ -582,6 +593,19 @@ function guardarAPIKey(){
   document.getElementById('api-key-status').textContent='¡Guardada correctamente!';
   document.getElementById('api-key-status').style.color='#3b6d11';
   setTimeout(()=>cerrarConfigAPI(),1200);
+}
+let _confirmResolve=null;
+function confirmar(msg){
+  return new Promise(resolve=>{
+    _confirmResolve=resolve;
+    document.getElementById('confirm-msg').textContent=msg;
+    document.getElementById('modal-confirm').style.display='flex';
+    document.getElementById('confirm-ok').onclick=()=>resolveConfirm(true);
+  });
+}
+function resolveConfirm(val){
+  document.getElementById('modal-confirm').style.display='none';
+  if(_confirmResolve){_confirmResolve(val);_confirmResolve=null;}
 }
 function cerrarSesion(){
   localStorage.removeItem(PASS_KEY);
@@ -811,7 +835,14 @@ async function renderHistorial(){
     return`<p style="font-size:13px;font-weight:600;margin-bottom:8px${ci>0?';margin-top:12px':''}">${c.nombre}</p>${filas}${sep}`;
   }).join('');
 }
-async function eliminarVenta(id){if(!confirm('¿Eliminar este registro?'))return;const vs=await cargarVentas();await guardarStorage(vs.filter(v=>v.id!==id));invalidarCache();renderHistorial();}
+async function eliminarVenta(id){
+  if(!await confirmar('¿Eliminar este registro?'))return;
+  const vs=await cargarVentas();
+  const nuevas=vs.filter(v=>v.id!==id);
+  _cacheVentas=nuevas;
+  renderHistorial();
+  await sheetGuardar('ventas',VENTAS_HEADERS,nuevas.map(ventaARow));
+}
 
 function agregarCheque(){
   const idx=chequeCont++;const div=document.createElement('div');div.className='cheque-row';div.id='cheque-'+idx;
@@ -1223,16 +1254,20 @@ async function renderHistorialRecibos(){
 }
 
 async function eliminarRecibo(id){
-  if(!confirm('¿Eliminar este recibo? Las facturas asociadas volverán a aparecer como pendientes.'))return;
-  const recibo=await cargarRecibos().find(r=>r.id===id);
+  if(!await confirmar('¿Eliminar este recibo? Las facturas asociadas volverán a aparecer como pendientes.'))return;
+  const recibos=await cargarRecibos();
+  const recibo=recibos.find(r=>r.id===id);
   if(recibo){
-      (recibo.asignaciones||[]).forEach(a=>{const v=ventas.find(x=>x.id===a.ventaId);if(v)v.cobrado=false;});
-    await guardarStorage(ventas);
+    const ventas=await cargarVentas();
+    (recibo.asignaciones||[]).forEach(a=>{const v=ventas.find(x=>x.id===a.ventaId);if(v)v.cobrado=false;});
+    _cacheVentas=ventas;
+    await sheetGuardar('ventas',VENTAS_HEADERS,ventas.map(ventaARow));
   }
-  await guardarRecibos((await cargarRecibos()).filter(r=>r.id!==id));
-  invalidarCache();
+  const nuevosRecibos=recibos.filter(r=>r.id!==id);
+  _cacheRecibos=nuevosRecibos;
   renderHistorialRecibos();
   renderAlertas();
+  await sheetGuardar('recibos',RECIBOS_HEADERS,nuevosRecibos.map(reciboARow));
 }
 
 
