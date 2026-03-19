@@ -842,6 +842,7 @@ async function eliminarVenta(id){
   _cacheVentas=nuevas;
   renderHistorial();
   await sheetGuardar('ventas',VENTAS_HEADERS,nuevas.map(ventaARow));
+  _cacheVentas=null;
 }
 
 function agregarCheque(){
@@ -1268,6 +1269,7 @@ async function eliminarRecibo(id){
   renderHistorialRecibos();
   renderAlertas();
   await sheetGuardar('recibos',RECIBOS_HEADERS,nuevosRecibos.map(reciboARow));
+  _cacheRecibos=null;
 }
 
 
