@@ -296,7 +296,7 @@ input,select,button,textarea{font-family:inherit}
         </div>
         <div class="fg">
           <label id="lbl-monto">Monto total (USD)</label>
-          <input type="number" id="f-monto" placeholder="0.00" step="0.01">
+          <input type="number" id="f-monto" placeholder="0.00" step="0.01" oninput="actualizarHintComision()">
           <p class="hint" id="hint-monto">Total a Pagar con IVA</p>
         </div>
       </div>
@@ -319,7 +319,7 @@ input,select,button,textarea{font-family:inherit}
       <div class="fg" id="fg-comision" style="display:none">
         <label>Comisión (USD)</label>
         <input type="number" id="f-comision" placeholder="0.00" step="0.01">
-        <p class="hint">Ingresá el monto de comisión de esta boleta</p>
+        <p class="hint" id="hint-comision-calc"></p>
       </div>
 
       <!-- FORMA DE PAGO (no para NC) -->
@@ -704,6 +704,18 @@ function setPlazo(v){
   G.plazo=v;
   [25,50,70].forEach(p=>el('plazo-'+p).classList.toggle('on',p===v));
   actualizarPlazoPreview();
+}
+function actualizarHintComision(){
+  const monto=parseFloat(el('f-monto').value)||0;
+  const hint=el('hint-comision-calc');
+  if(!hint)return;
+  if(G.origen==='boleta'&&monto>0){
+    const p5=(monto*0.05).toFixed(2);
+    const p65=(monto*0.065).toFixed(2);
+    hint.textContent=`5% = USD $${p5}   ·   6.5% = USD $${p65}`;
+  } else {
+    hint.textContent='';
+  }
 }
 function actualizarPlazoPreview(){
   const f=el('f-fecha').value;
@@ -1153,27 +1165,6 @@ function guardarRecibo(){
   const monto=parseFloat(el('r-monto').value);
   const numero=el('r-numero').value.trim();
   if(!cliente||!fecha||!monto){alert('Completá cliente, fecha y monto');return;}
-
-  // Validar comisión — obligatoria siempre
-  if(esBoleta){
-    const comVal=parseFloat(el('f-comision').value);
-    if(!comVal||isNaN(comVal)){
-      alert('Ingresá la comisión de la boleta antes de guardar.');
-      el('f-comision').focus();
-      return;
-    }
-  } else {
-    const tieneComision=G.pendingPDF&&(
-      (G.vendedor==='guillermo'&&G.pendingPDF.netoSinIva)||
-      (G.vendedor==='juanmanuel'&&G.pendingPDF.comision!=null)
-    );
-    if(!tieneComision){
-      alert('No se pudo calcular la comisión.\n\nAsegurate de:\n1. Seleccionar el vendedor ANTES de subir el PDF\n2. Volver a subir el PDF si cambiaste el vendedor\n\nNo se puede guardar sin comisión calculada.');
-      el('pdf-status').textContent='⚠ Volvé a subir el PDF con el vendedor correcto seleccionado.';
-      el('pdf-status').style.color='#a32d2d';
-      return;
-    }
-  }
 
   const asignaciones=[];
   document.querySelectorAll('[id^="pchk-"]').forEach(chk=>{
