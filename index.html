@@ -76,6 +76,7 @@ input,select,button,textarea{font-family:inherit}
 
 /* METRICS */
 .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem}
+#ventas-metrics{grid-template-columns:repeat(4,1fr)}
 .metric{background:#f9f9f9;border-radius:10px;padding:.9rem}
 .metric .mlabel{font-size:11px;color:#666;margin-bottom:4px;line-height:1.3}
 .metric .mval{font-size:22px;font-weight:600}
@@ -248,15 +249,12 @@ input,select,button,textarea{font-family:inherit}
   <div id="sec-nueva" class="sec">
     <div class="card">
       <p class="card-title">¿Qué querés cargar?</p>
-      <div class="sel-grid col3">
+      <div class="sel-grid col2">
         <div class="sel-btn on" id="orig-factura" onclick="setOrigen('factura')">
-          <span class="ico">📄</span><span class="lbl">Factura</span><span class="sub">PDF ZLibra</span>
+          <span class="ico">📄</span><span class="lbl">Factura / NC</span><span class="sub">PDF ZLibra — la IA detecta el tipo</span>
         </div>
         <div class="sel-btn" id="orig-boleta" onclick="setOrigen('boleta')">
           <span class="ico">✏️</span><span class="lbl">Boleta</span><span class="sub">Manual</span>
-        </div>
-        <div class="sel-btn" id="orig-nc" onclick="setOrigen('nc')">
-          <span class="ico">↩️</span><span class="lbl">Nota crédito</span><span class="sub">PDF ZLibra</span>
         </div>
       </div>
 
@@ -711,19 +709,19 @@ function acKeydown(e,listId,inputId){
 // ─────────────────────────────────────────────
 function setOrigen(v){
   G.origen=v;
-  ['factura','boleta','nc'].forEach(o=>el('orig-'+o).classList.toggle('on',o===v));
-  el('zona-pdf').style.display=(v==='factura'||v==='nc')?'block':'none';
+  ['factura','boleta'].forEach(o=>el('orig-'+o)&&el('orig-'+o).classList.toggle('on',o===v));
+  el('zona-pdf').style.display=v==='factura'?'block':'none';
   el('zona-boleta').style.display=v==='boleta'?'block':'none';
-  el('bloque-pago').style.display=v==='nc'?'none':'block';
-  el('aviso-nc').style.display=v==='nc'?'block':'none';
+  el('bloque-pago').style.display='block';
+  el('aviso-nc').style.display='none';
   el('fg-comision').style.display=v==='boleta'?'block':'none';
-  el('form-titulo').textContent=v==='nc'?'Datos de la nota de crédito':v==='boleta'?'Datos de la boleta':'Datos de la venta';
-  el('btn-guardar').textContent=v==='nc'?'Guardar nota de crédito':'Guardar venta';
-  el('lbl-monto').textContent=v==='nc'?'Monto de la NC (USD)':'Monto total (USD)';
+  el('form-titulo').textContent=v==='boleta'?'Datos de la boleta':'Datos de la venta';
+  el('btn-guardar').textContent='Guardar';
+  el('lbl-monto').textContent='Monto total (USD)';
   el('hint-monto').textContent=v==='boleta'?'Monto de la boleta':'Total a Pagar con IVA';
-  el('lbl-numero').textContent=v==='boleta'?'N° Boleta (opc.)':v==='nc'?'N° Nota de crédito':'N° Factura';
-  el('f-numero').placeholder=v==='nc'?'NC 3204':v==='boleta'?'001':'A 3204';
-  el('upzone-txt').textContent=v==='nc'?'Arrastrá o clickeá para subir la nota de crédito':'Arrastrá o clickeá para subir la factura PDF';
+  el('lbl-numero').textContent=v==='boleta'?'N° Boleta (opc.)':'N° Factura / NC';
+  el('f-numero').placeholder=v==='boleta'?'001':'A 3204';
+  el('upzone-txt').textContent='Arrastrá o clickeá para subir el PDF (factura o nota de crédito)';
   limpiarForm();
 }
 function setVendedor(v){
@@ -798,11 +796,11 @@ async function procesarPDF(input){
 
   const CLIENTES_5PCT_LIST='ALTAGAMA IMP SAS, REVELLO TREND, VR JOYEROS, RELCA S.A, CLANI LTDA, RIO S.R.L, RUTH SCHATZ, ETIFAL S.A, HERNAN LAFFITTE S.A.S, REY MIDAS, LEONARDO SVELITZA, CREATORE LEO S.A.S., LIZARDO SCHATZ, RYS13 S.A.S., RAUL LAFFITTE Y CIA S.A';
 
-  let prompt=`Sos un extractor de comprobantes fiscales electrónicos uruguayos (ZLibra/ZetaSoftware). Respondé SOLO con JSON válido sin backticks.\nmonto = Total a Pagar con IVA. Ignorá el campo Vencimiento.\n`;
+  let prompt=`Sos un extractor de comprobantes fiscales electrónicos uruguayos (ZLibra/ZetaSoftware). Respondé SOLO con JSON válido sin backticks.\nmonto = Total a Pagar con IVA. Ignorá el campo Vencimiento.\nDETECTÁ el tipo: si en el encabezado del PDF dice "NC e-Factura" o "Nota de Crédito" → es una nota de crédito (esNC:true). Si dice "e-Factura" sin NC → es factura (esNC:false).\n`;
   if(esJM&&!esNC){
-    prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Juan Manuel así:\n1. Primero identificá el nombre del receptor (cliente) de la factura.\n2. Si el receptor coincide con alguno de estos clientes: ${CLIENTES_5PCT_LIST} → la comisión es 5% del monto neto total sin IVA (sin analizar artículos). Poné "clienteEspecial":true en el JSON.\n3. Si el receptor NO está en esa lista → analizá cada artículo: si la descripción contiene "plata y oro" o "plata" → 6.5% del neto sin IVA de ese artículo. Si dice "oro 9k/9kt/18k/18kt" o no menciona plata → 5% del neto sin IVA. Sumá todas las comisiones.\nJSON exacto: {"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"clienteEspecial":false,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":0,"comision":0}]}`;
+    prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Juan Manuel así:\n1. Primero identificá el nombre del receptor (cliente) de la factura.\n2. Si el receptor coincide con alguno de estos clientes: ${CLIENTES_5PCT_LIST} → la comisión es 5% del monto neto total sin IVA (sin analizar artículos). Poné "clienteEspecial":true en el JSON.\n3. Si el receptor NO está en esa lista → analizá cada artículo: si la descripción contiene "plata y oro" o "plata" → 6.5% del neto sin IVA de ese artículo. Si dice "oro 9k/9kt/18k/18kt" o no menciona plata → 5% del neto sin IVA. Sumá todas las comisiones.\nJSON exacto: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"clienteEspecial":false,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":0,"comision":0}]}`;
   }else{
-    prompt+=`Extraé también el emisor del comprobante (nombre de la empresa que emite, ej: BERAD o GORDIN) y el monto neto sin IVA.\nJSON: {"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"${esNC?'número NC':'ej: A 3204'}","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0}`;
+    prompt+=`Extraé también el emisor del comprobante (nombre de la empresa que emite, ej: BERAD o GORDIN) y el monto neto sin IVA.\nJSON: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0}`;
   }
   try{
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
@@ -812,17 +810,28 @@ async function procesarPDF(input){
     });
     const data=await resp.json();
     const parsed=JSON.parse(data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim());
+    // La IA detecta si es NC
+    const detectedNC = parsed.esNC===true;
+    if(detectedNC){
+      G.origen='nc';
+      el('aviso-nc').style.display='block';
+      el('bloque-pago').style.display='none';
+      el('form-titulo').textContent='Nota de crédito detectada';
+      el('btn-guardar').textContent='Guardar nota de crédito';
+      el('lbl-numero').textContent='N° Nota de crédito';
+    }
     G.pendingPDF=parsed;
     if(parsed.cliente)el('f-cliente').value=parsed.cliente;
     if(parsed.numero)el('f-numero').value=parsed.numero;
     if(parsed.fecha){el('f-fecha').value=parsed.fecha;actualizarPlazoPreview();}
     if(parsed.monto)el('f-monto').value=parsed.monto;
-    let msg='Datos cargados. ';
-    if(esNC&&parsed.netoSinIva){const com=G.vendedor==='guillermo'?redondear(parsed.netoSinIva*0.05):redondear(parsed.comision||0);msg+=`NC por $${parsed.monto}. Comisión a descontar: $${com}.`;}
+    let msg=detectedNC?'✓ Nota de crédito detectada. ':'✓ Factura detectada. Datos cargados. ';
+    if(detectedNC&&parsed.netoSinIva){const com=G.vendedor==='guillermo'?redondear(parsed.netoSinIva*0.05):redondear(parsed.comision||0);msg+=`Monto: $${parsed.monto}. Comisión a descontar: $${com}.`;}
     else if(!esJM&&parsed.netoSinIva)msg+=`Comisión Guillermo: USD $${redondear(parsed.netoSinIva*0.05)} (5% de $${parsed.netoSinIva} neto).`;
     else if(esJM&&parsed.comision!=null)msg+=`Comisión Juan Manuel: USD $${redondear(parsed.comision)}.`;
     else msg+='Revisá y elegí forma de pago.';
     el('pdf-status').textContent=msg;
+    el('pdf-status').style.color=detectedNC?'#854f0b':'#3b6d11';
   }catch(e){el('pdf-status').textContent='No se pudo leer automáticamente. Ingresá los datos manualmente.';console.error(e);}
 }
 
@@ -842,8 +851,9 @@ function guardarVenta(){
   const numero=el('f-numero').value.trim();
   const fecha=el('f-fecha').value;
   const monto=parseFloat(el('f-monto').value);
-  const esNC=G.origen==='nc';
+  const esNC=G.origen==='nc'||(G.pendingPDF&&G.pendingPDF.esNC===true);
   const esBoleta=G.origen==='boleta';
+  if(esNC)G.origen='nc'; // asegurar que quede guardado como nc
   if(!cliente||!fecha||!monto){alert('Completá cliente, fecha y monto');return;}
 
   // Validar comisión — obligatoria siempre
@@ -1388,7 +1398,8 @@ function renderVentas(){
   el('ventas-metrics').innerHTML=`
     <div class="metric"><p class="mlabel">Berad S.R.L.</p><p class="mval">$${fmtUSD(grupos.berad.total)}</p></div>
     <div class="metric"><p class="mlabel">Gordin S.R.L.</p><p class="mval">$${fmtUSD(grupos.gordin.total)}</p></div>
-    <div class="metric"><p class="mlabel">Boletas</p><p class="mval">$${fmtUSD(grupos.boleta.total)}</p></div>`;
+    <div class="metric"><p class="mlabel">Boletas</p><p class="mval">$${fmtUSD(grupos.boleta.total)}</p></div>
+    <div class="metric" style="background:#f0f0f0;border:1px solid #d0d0d0"><p class="mlabel" style="font-weight:600">Total del período</p><p class="mval">$${fmtUSD(total)}</p></div>`;
   el('ventas-detalle').innerHTML=Object.entries(grupos).filter(([,g])=>g.items.length).map(([,g])=>{
     const pct=total>0?((g.total/total)*100).toFixed(1):0;
     const rows=g.items.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(v=>`
