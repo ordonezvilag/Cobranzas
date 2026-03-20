@@ -272,9 +272,9 @@ input,select,button,textarea{font-family:inherit}
 
       <div id="zona-pdf">
         <div class="upzone" id="dropzone" onclick="document.getElementById('pdf-file').click()">
-          <input type="file" id="pdf-file" accept="application/pdf" onchange="procesarPDF(this)">
-          <p style="font-size:14px;color:#666" id="upzone-txt">Arrastrá o clickeá para subir el PDF (factura o nota de crédito)</p>
-          <p style="font-size:12px;color:#888;margin-top:4px">La IA extrae los datos automáticamente</p>
+          <input type="file" id="pdf-file" accept="application/pdf,image/*" capture="environment" onchange="procesarPDF(this)">
+          <p style="font-size:14px;color:#666" id="upzone-txt">Subir PDF o foto de la factura</p>
+          <p style="font-size:12px;color:#888;margin-top:4px">PDF, JPG o PNG · en celular podés usar la cámara</p>
         </div>
         <p class="status" id="pdf-status"></p>
       </div>
@@ -805,8 +805,11 @@ async function procesarPDF(input){
   const file=input.files[0];if(!file)return;
   const key=localStorage.getItem('anthropic_key');
   if(!key){el('pdf-status').textContent='Configurá tu API key primero (botón ⚙ API arriba).';abrirAPIModal();return;}
-  el('pdf-status').textContent='Leyendo PDF...';
+  const esImagen=file.type.startsWith('image/');
+  el('pdf-status').textContent=esImagen?'Leyendo imagen...':'Leyendo PDF...';
+  el('pdf-status').style.color='#666';
   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+  const mediaType=esImagen?file.type:'application/pdf';
   el('pdf-status').textContent='Extrayendo datos con IA...';
   const esNC=G.origen==='nc';
   const esJM=G.vendedor==='juanmanuel';
@@ -821,10 +824,13 @@ async function procesarPDF(input){
     prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Guillermo (siempre 5% sobre el neto sin IVA de cada artículo).\nNetoSinIva es obligatorio.\nJSON: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":5,"comision":0}]}`;
   }
   try{
+    const contentBlock=esImagen
+      ?{type:'image',source:{type:'base64',media_type:mediaType,data:b64}}
+      :{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}};
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:prompt}]}]})
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]})
     });
     const data=await resp.json();
     const parsed=JSON.parse(data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim());
