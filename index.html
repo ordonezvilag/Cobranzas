@@ -510,6 +510,7 @@ function addDias(f,n){if(!f)return'';try{const d=new Date(f+'T00:00:00');d.setDa
 function diasHasta(f){if(!f)return 9999;try{const h=new Date();h.setHours(0,0,0,0);return Math.round((new Date(f+'T00:00:00')-h)/86400000);}catch(e){return 9999;}}
 function hoy(){return new Date().toISOString().split('T')[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function redondear(n){return Math.round(n);}
 function show(id){document.getElementById(id).style.display='block';}
 function hide(id){document.getElementById(id).style.display='none';}
 function el(id){return document.getElementById(id);}
@@ -817,9 +818,9 @@ async function procesarPDF(input){
     if(parsed.fecha){el('f-fecha').value=parsed.fecha;actualizarPlazoPreview();}
     if(parsed.monto)el('f-monto').value=parsed.monto;
     let msg='Datos cargados. ';
-    if(esNC&&parsed.netoSinIva){const com=G.vendedor==='guillermo'?(parsed.netoSinIva*0.05).toFixed(2):(parsed.comision||0).toFixed(2);msg+=`NC por $${parsed.monto}. Comisión a descontar: $${com}.`;}
-    else if(!esJM&&parsed.netoSinIva)msg+=`Comisión Guillermo: USD $${(parsed.netoSinIva*0.05).toFixed(2)} (5% de $${parsed.netoSinIva} neto).`;
-    else if(esJM&&parsed.comision!=null)msg+=`Comisión Juan Manuel: USD $${parseFloat(parsed.comision).toFixed(2)}.`;
+    if(esNC&&parsed.netoSinIva){const com=G.vendedor==='guillermo'?redondear(parsed.netoSinIva*0.05):redondear(parsed.comision||0);msg+=`NC por $${parsed.monto}. Comisión a descontar: $${com}.`;}
+    else if(!esJM&&parsed.netoSinIva)msg+=`Comisión Guillermo: USD $${redondear(parsed.netoSinIva*0.05)} (5% de $${parsed.netoSinIva} neto).`;
+    else if(esJM&&parsed.comision!=null)msg+=`Comisión Juan Manuel: USD $${redondear(parsed.comision)}.`;
     else msg+='Revisá y elegí forma de pago.';
     el('pdf-status').textContent=msg;
   }catch(e){el('pdf-status').textContent='No se pudo leer automáticamente. Ingresá los datos manualmente.';console.error(e);}
@@ -880,17 +881,17 @@ function guardarVenta(){
   }else if(G.pendingPDF){
     const p=G.pendingPDF;
     if(G.vendedor==='guillermo'&&p.netoSinIva){
-      v.comision=parseFloat((p.netoSinIva*0.05).toFixed(2));
+      v.comision=redondear(p.netoSinIva*0.05);
       v.netoSinIva=p.netoSinIva;
     }else if(G.vendedor==='juanmanuel'&&p.comision!=null){
-      v.comision=parseFloat(parseFloat(p.comision).toFixed(2));
+      v.comision=redondear(parseFloat(p.comision));
       v.detalleComision=p.clienteEspecial
         ?[{descripcion:'5% fijo (cliente especial)',neto:p.netoSinIva,porcentaje:5,comision:v.comision}]
         :(p.detalleComision||[]);
       v.netoSinIva=p.netoSinIva;
     }
   }
-  if(esNC&&v.comision!=null)v.comision=-Math.abs(v.comision);
+  if(esNC&&v.comision!=null)v.comision=-Math.abs(redondear(v.comision));
 
   // Forma de pago
   if(!esNC){
