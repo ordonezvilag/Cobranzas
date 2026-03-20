@@ -519,21 +519,43 @@ function loading(on){el('loading').classList.toggle('on',on);}
 // SHEETS
 // ─────────────────────────────────────────────
 async function sheetRead(tabla){
-  const r=await fetch(SCRIPT_URL+'?accion=leer&tabla='+encodeURIComponent(tabla));
-  const d=await r.json();
-  return Array.isArray(d.data)?d.data:[];
+  try{
+    const r=await fetch(SCRIPT_URL+'?accion=leer&tabla='+encodeURIComponent(tabla));
+    const d=await r.json();
+    return Array.isArray(d.data)?d.data:[];
+  }catch(e){console.error('Error leyendo:',e);return[];}
 }
+async function sheetAppend(tabla,headers,row){
+  // Agrega una fila nueva
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'append',tabla,headers,row})});
+  }catch(e){console.error('Error append:',e);}
+}
+async function sheetUpdate(tabla,id,headers,row){
+  // Actualiza una fila existente por ID (columna 0)
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'update',tabla,id,headers,row})});
+  }catch(e){console.error('Error update:',e);}
+}
+async function sheetDelete(tabla,id){
+  // Elimina una fila por ID
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'delete',tabla,id})});
+  }catch(e){console.error('Error delete:',e);}
+}
+// Mantener sheetWrite para compatibilidad (reescritura completa, solo usado en migraciones)
 async function sheetWrite(tabla,headers,rows){
   try{
-    // POST con mode no-cors para evitar problemas CORS — no podemos leer la respuesta
-    // pero el dato llega correctamente al Apps Script
-    await fetch(SCRIPT_URL,{
-      method:'POST',
-      mode:'no-cors',
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({accion:'guardar',tabla,headers,rows})
-    });
-  }catch(e){console.error('Error guardando:',e);}
+      body:JSON.stringify({accion:'guardar',tabla,headers,rows})});
+  }catch(e){console.error('Error write:',e);}
 }
 
 function ventaToRow(v){
@@ -893,7 +915,7 @@ function guardarVenta(){
   }
 
   G.ventas.push(v);
-  saveVentas();
+  sheetAppend('ventas',VENTAS_HDR,ventaToRow(v));
   limpiarForm();
   alert(esNC?'Nota de crédito guardada':'Venta guardada');
   showTab('alertas',document.querySelector('.tab'));
@@ -1009,7 +1031,7 @@ function renderAlertas(){
 
 function marcarChequesRecibidos(vid){
   const v=G.ventas.find(x=>x.id===vid);
-  if(v){v.chequesRecibidos=true;saveVentas();renderAlertas();}
+  if(v){v.chequesRecibidos=true;sheetUpdate('ventas',vid,VENTAS_HDR,ventaToRow(v));renderAlertas();}
 }
 function marcarCobrado(vid,cidx){
   const v=G.ventas.find(x=>x.id===vid);
@@ -1017,7 +1039,7 @@ function marcarCobrado(vid,cidx){
   if(cidx===null||cidx==='null'){v.cobrado=true;}
   else if(v.cheques&&v.cheques[parseInt(cidx)]){v.cheques[parseInt(cidx)].cobrado=true;}
   if(v.cheques&&v.cheques.length&&v.cheques.every(c=>c.cobrado))v.cobrado=true;
-  saveVentas();renderAlertas();
+  sheetUpdate('ventas',vid,VENTAS_HDR,ventaToRow(v));renderAlertas();
 }
 
 // ─────────────────────────────────────────────
@@ -1117,7 +1139,7 @@ function renderHistorial(){
 function eliminarVenta(id){
   confirmar('¿Eliminar este registro?',()=>{
     G.ventas=G.ventas.filter(v=>v.id!==id);
-    saveVentas();
+    sheetDelete('ventas',id);
     renderHistorial();
     renderAlertas();
   });
@@ -1125,10 +1147,14 @@ function eliminarVenta(id){
 function eliminarRecibo(id){
   confirmar('¿Eliminar este recibo? Las facturas asociadas volverán como pendientes.',()=>{
     const r=G.recibos.find(x=>x.id===id);
-    if(r)(r.asignaciones||[]).forEach(a=>{const v=G.ventas.find(x=>x.id===a.ventaId);if(v)v.cobrado=false;});
+    if(r){
+      (r.asignaciones||[]).forEach(a=>{
+        const v=G.ventas.find(x=>x.id===a.ventaId);
+        if(v){v.cobrado=false;sheetUpdate('ventas',v.id,VENTAS_HDR,ventaToRow(v));}
+      });
+    }
     G.recibos=G.recibos.filter(x=>x.id!==id);
-    saveRecibos();
-    if(r)saveVentas();
+    sheetDelete('recibos',id);
     renderHistorial();
     renderAlertas();
   });
@@ -1227,9 +1253,16 @@ function guardarRecibo(){
     if(yaCob+montoParcial>=v.monto-0.01)v.cobrado=true;
   });
 
-  G.recibos.push({id:uid(),cliente,fecha,monto,numero,asignaciones});
-  saveRecibos();
-  if(asignaciones.length)saveVentas();
+  const nuevoRecibo={id:uid(),cliente,fecha,monto,numero,asignaciones};
+  G.recibos.push(nuevoRecibo);
+  sheetAppend('recibos',RECIBOS_HDR,reciboToRow(nuevoRecibo));
+  // Actualizar facturas cobradas
+  if(asignaciones.length){
+    asignaciones.forEach(a=>{
+      const v=G.ventas.find(x=>x.id===a.ventaId);
+      if(v)sheetUpdate('ventas',v.id,VENTAS_HDR,ventaToRow(v));
+    });
+  }
   limpiarRecibo();
   alert('Recibo guardado');
   renderAlertas();
