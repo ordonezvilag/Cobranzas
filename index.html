@@ -800,7 +800,8 @@ async function procesarPDF(input){
   if(esJM&&!esNC){
     prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Juan Manuel así:\n1. Primero identificá el nombre del receptor (cliente) de la factura.\n2. Si el receptor coincide con alguno de estos clientes: ${CLIENTES_5PCT_LIST} → la comisión es 5% del monto neto total sin IVA (sin analizar artículos). Poné "clienteEspecial":true en el JSON.\n3. Si el receptor NO está en esa lista → analizá cada artículo: si la descripción contiene "plata y oro" o "plata" → 6.5% del neto sin IVA de ese artículo. Si dice "oro 9k/9kt/18k/18kt" o no menciona plata → 5% del neto sin IVA. Sumá todas las comisiones.\nJSON exacto: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"clienteEspecial":false,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":0,"comision":0}]}`;
   }else{
-    prompt+=`Extraé también el emisor del comprobante (nombre de la empresa que emite, ej: BERAD o GORDIN) y el monto neto sin IVA.\nJSON: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0}`;
+    // Guillermo - analizar artículos para comisión (mismo criterio que JM pero siempre 5%)
+    prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Guillermo (siempre 5% sobre el neto sin IVA de cada artículo).\nNetoSinIva es obligatorio.\nJSON: {"esNC":false,"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204 o NC 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":5,"comision":0}]}`;
   }
   try{
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
@@ -865,9 +866,11 @@ function guardarVenta(){
       return;
     }
   } else {
+    const esNCActual=G.origen==='nc'||(G.pendingPDF&&G.pendingPDF.esNC===true);
     const tieneComision=G.pendingPDF&&(
+      esNCActual||(  // NC siempre se puede guardar si tiene datos del PDF
       (G.vendedor==='guillermo'&&G.pendingPDF.netoSinIva)||
-      (G.vendedor==='juanmanuel'&&G.pendingPDF.comision!=null)
+      (G.vendedor==='juanmanuel'&&G.pendingPDF.comision!=null))
     );
     if(!tieneComision){
       alert('No se pudo calcular la comisión.\n\nAsegurate de:\n1. Seleccionar el vendedor ANTES de subir el PDF\n2. Volver a subir el PDF si cambiaste el vendedor\n\nNo se puede guardar sin comisión calculada.');
@@ -891,8 +894,10 @@ function guardarVenta(){
   }else if(G.pendingPDF){
     const p=G.pendingPDF;
     if(G.vendedor==='guillermo'&&p.netoSinIva){
-      v.comision=redondear(p.netoSinIva*0.05);
+      // Use AI calculated comision if available, otherwise calculate 5%
+      v.comision=p.comision!=null?redondear(p.comision):redondear(p.netoSinIva*0.05);
       v.netoSinIva=p.netoSinIva;
+      v.detalleComision=p.detalleComision||[];
     }else if(G.vendedor==='juanmanuel'&&p.comision!=null){
       v.comision=redondear(parseFloat(p.comision));
       v.detalleComision=p.clienteEspecial
@@ -900,6 +905,13 @@ function guardarVenta(){
         :(p.detalleComision||[]);
       v.netoSinIva=p.netoSinIva;
     }
+  }
+  // Para NC: si no hay comisión calculada pero hay netoSinIva, calcular
+  if(esNC&&(v.comision==null||v.comision===0)&&G.pendingPDF?.netoSinIva){
+    const neto=G.pendingPDF.netoSinIva;
+    const comAI=G.pendingPDF.comision;
+    v.comision=comAI!=null&&comAI>0?redondear(comAI):redondear(neto*(G.vendedor==='guillermo'?0.05:0.05));
+    v.netoSinIva=neto;
   }
   if(esNC&&v.comision!=null)v.comision=-Math.abs(redondear(v.comision));
 
