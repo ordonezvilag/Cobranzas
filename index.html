@@ -1046,6 +1046,80 @@ function marcarCobrado(vid,cidx){
 // ─────────────────────────────────────────────
 // HISTORIAL
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// EDICION
+// ─────────────────────────────────────────────
+let _editId=null;
+let _editTipo=null;
+
+function abrirEditarVenta(id){
+  const v=G.ventas.find(x=>x.id===id);
+  if(!v)return;
+  _editId=id;_editTipo='venta';
+  const enc=v.origen==='nc',eb=v.origen==='boleta';
+  el('edit-titulo').textContent=enc?'Editar nota de crédito':eb?'Editar boleta':'Editar factura';
+  el('edit-campos').innerHTML=`
+    <div class="fg"><label>Cliente</label><input id="ed-cliente" value="${v.cliente}"></div>
+    <div class="grid2">
+      <div class="fg"><label>${eb?'N° Boleta':'N° '+(enc?'NC':'Factura')}</label><input id="ed-numero" value="${v.numero||''}"></div>
+      <div class="fg"><label>Fecha</label><input type="date" id="ed-fecha" value="${v.fecha}"></div>
+      <div class="fg"><label>Monto (USD)</label><input type="number" id="ed-monto" value="${v.monto}" step="0.01"></div>
+      <div class="fg"><label>Comisión (USD)</label><input type="number" id="ed-comision" value="${v.comision!=null?Math.abs(v.comision):''}" step="1" placeholder="Entero redondeado"></div>
+    </div>
+    ${!eb&&!enc?`<div class="fg"><label>Plazo (días)</label><input type="number" id="ed-plazo" value="${v.plazo||25}"></div>`:''}
+  `;
+  el('modal-editar').style.display='flex';
+}
+
+function abrirEditarRecibo(id){
+  const r=G.recibos.find(x=>x.id===id);
+  if(!r)return;
+  _editId=id;_editTipo='recibo';
+  el('edit-titulo').textContent='Editar recibo';
+  el('edit-campos').innerHTML=`
+    <div class="fg"><label>Cliente</label><input id="ed-cliente" value="${r.cliente}"></div>
+    <div class="grid2">
+      <div class="fg"><label>Fecha</label><input type="date" id="ed-fecha" value="${r.fecha}"></div>
+      <div class="fg"><label>Monto (USD)</label><input type="number" id="ed-monto" value="${r.monto}" step="0.01"></div>
+      <div class="fg"><label>N° Recibo</label><input id="ed-numero" value="${r.numero||''}"></div>
+    </div>
+  `;
+  el('modal-editar').style.display='flex';
+}
+
+function cerrarEditar(){
+  el('modal-editar').style.display='none';
+  _editId=null;_editTipo=null;
+}
+
+function guardarEdicion(){
+  if(_editTipo==='venta'){
+    const v=G.ventas.find(x=>x.id===_editId);
+    if(!v)return;
+    v.cliente=el('ed-cliente').value.trim()||v.cliente;
+    v.numero=el('ed-numero').value.trim();
+    v.fecha=el('ed-fecha').value||v.fecha;
+    v.monto=parseFloat(el('ed-monto').value)||v.monto;
+    const comRaw=parseFloat(el('ed-comision').value);
+    if(!isNaN(comRaw))v.comision=v.origen==='nc'?-Math.abs(redondear(comRaw)):redondear(comRaw);
+    const plazoEl=el('ed-plazo');
+    if(plazoEl)v.plazo=parseInt(plazoEl.value)||v.plazo;
+    sheetUpdate('ventas',v.id,VENTAS_HDR,ventaToRow(v));
+    renderHistorial();
+    renderAlertas();
+  } else if(_editTipo==='recibo'){
+    const r=G.recibos.find(x=>x.id===_editId);
+    if(!r)return;
+    r.cliente=el('ed-cliente').value.trim()||r.cliente;
+    r.fecha=el('ed-fecha').value||r.fecha;
+    r.monto=parseFloat(el('ed-monto').value)||r.monto;
+    r.numero=el('ed-numero').value.trim();
+    sheetUpdate('recibos',r.id,RECIBOS_HDR,reciboToRow(r));
+    renderHistorial();
+  }
+  cerrarEditar();
+}
+
 function getSaldoPagado(ventaId){
   return G.recibos.reduce((s,r)=>s+(r.asignaciones||[]).filter(a=>a.ventaId===ventaId).reduce((ss,a)=>ss+a.monto,0),0);
 }
@@ -1098,7 +1172,7 @@ function renderHistorial(){
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <span style="font-size:13px;font-weight:500;color:${enc?'#a32d2d':'inherit'}">${enc?'−':''}USD $${fmtUSD(Math.abs(v.monto))}</span>
-            <button class="btn btn-sm" onclick="eliminarVenta('${v.id}')">Eliminar</button>
+            <button class="btn btn-sm" onclick="abrirEditarVenta('${v.id}')">Editar</button> <button class="btn btn-sm" onclick="eliminarVenta('${v.id}')">Eliminar</button>
           </div>
         </div>`;
       }).join('');
@@ -1128,7 +1202,7 @@ function renderHistorial(){
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <span style="font-size:13px;font-weight:500">USD $${fmtUSD(r.monto)}</span>
-            <button class="btn btn-sm" onclick="eliminarRecibo('${r.id}')">Eliminar</button>
+            <button class="btn btn-sm" onclick="abrirEditarRecibo('${r.id}')">Editar</button> <button class="btn btn-sm" onclick="eliminarRecibo('${r.id}')">Eliminar</button>
           </div>
         </div>`;
       }).join('');
@@ -1430,5 +1504,16 @@ el('f-fecha').value=hoy();
 el('r-fecha').value=hoy();
 initDrop();
 </script>
+<!-- MODAL EDITAR -->
+<div id="modal-editar" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;overflow-y:auto;padding:1rem">
+  <div style="background:#fff;border-radius:14px;padding:1.75rem;width:100%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,.2);margin:auto">
+    <p style="font-size:16px;font-weight:600;margin-bottom:1.25rem" id="edit-titulo">Editar registro</p>
+    <div id="edit-campos"></div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn btn-p btn-full" onclick="guardarEdicion()">Guardar cambios</button>
+      <button class="btn btn-full" onclick="cerrarEditar()">Cancelar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
