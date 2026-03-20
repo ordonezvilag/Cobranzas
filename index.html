@@ -524,8 +524,16 @@ async function sheetRead(tabla){
   return Array.isArray(d.data)?d.data:[];
 }
 async function sheetWrite(tabla,headers,rows){
-  const url=SCRIPT_URL+'?accion=guardar&tabla='+encodeURIComponent(tabla)+'&headers='+encodeURIComponent(JSON.stringify(headers))+'&rows='+encodeURIComponent(JSON.stringify(rows));
-  try{await fetch(url);}catch(e){console.error('Error guardando:',e);}
+  try{
+    // POST con mode no-cors para evitar problemas CORS — no podemos leer la respuesta
+    // pero el dato llega correctamente al Apps Script
+    await fetch(SCRIPT_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'guardar',tabla,headers,rows})
+    });
+  }catch(e){console.error('Error guardando:',e);}
 }
 
 function ventaToRow(v){
@@ -764,9 +772,12 @@ async function procesarPDF(input){
   el('pdf-status').textContent='Extrayendo datos con IA...';
   const esNC=G.origen==='nc';
   const esJM=G.vendedor==='juanmanuel';
+
+  const CLIENTES_5PCT_LIST='ALTAGAMA IMP SAS, REVELLO TREND, VR JOYEROS, RELCA S.A, CLANI LTDA, RIO S.R.L, RUTH SCHATZ, ETIFAL S.A, HERNAN LAFFITTE S.A.S, REY MIDAS, LEONARDO SVELITZA, CREATORE LEO S.A.S., LIZARDO SCHATZ, RYS13 S.A.S., RAUL LAFFITTE Y CIA S.A';
+
   let prompt=`Sos un extractor de comprobantes fiscales electrónicos uruguayos (ZLibra/ZetaSoftware). Respondé SOLO con JSON válido sin backticks.\nmonto = Total a Pagar con IVA. Ignorá el campo Vencimiento.\n`;
   if(esJM&&!esNC){
-    prompt+=`Extraé también el emisor del comprobante (nombre de la empresa que emite, ej: BERAD o GORDIN) y los artículos para calcular comisión de Juan Manuel.\nReglas: si descripción contiene "plata y oro" o "plata" → 6.5% del neto sin IVA. Si dice "oro 9k/9kt/18k/18kt" o no menciona plata → 5% del neto sin IVA. Sumá todas las comisiones.\nJSON: {"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":0,"comision":0}]}`;
+    prompt+=`Extraé el emisor (nombre empresa emisora, ej: BERAD o GORDIN) y calculá la comisión de Juan Manuel así:\n1. Primero identificá el nombre del receptor (cliente) de la factura.\n2. Si el receptor coincide con alguno de estos clientes: ${CLIENTES_5PCT_LIST} → la comisión es 5% del monto neto total sin IVA (sin analizar artículos). Poné "clienteEspecial":true en el JSON.\n3. Si el receptor NO está en esa lista → analizá cada artículo: si la descripción contiene "plata y oro" o "plata" → 6.5% del neto sin IVA de ese artículo. Si dice "oro 9k/9kt/18k/18kt" o no menciona plata → 5% del neto sin IVA. Sumá todas las comisiones.\nJSON exacto: {"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"ej: A 3204","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0,"comision":0,"clienteEspecial":false,"detalleComision":[{"descripcion":"","neto":0,"porcentaje":0,"comision":0}]}`;
   }else{
     prompt+=`Extraé también el emisor del comprobante (nombre de la empresa que emite, ej: BERAD o GORDIN) y el monto neto sin IVA.\nJSON: {"cliente":"nombre receptor","emisor":"BERAD o GORDIN o vacío","numero":"${esNC?'número NC':'ej: A 3204'}","fecha":"YYYY-MM-DD","monto":0,"netoSinIva":0}`;
   }
@@ -851,7 +862,9 @@ function guardarVenta(){
       v.netoSinIva=p.netoSinIva;
     }else if(G.vendedor==='juanmanuel'&&p.comision!=null){
       v.comision=parseFloat(parseFloat(p.comision).toFixed(2));
-      v.detalleComision=p.detalleComision||[];
+      v.detalleComision=p.clienteEspecial
+        ?[{descripcion:'5% fijo (cliente especial)',neto:p.netoSinIva,porcentaje:5,comision:v.comision}]
+        :(p.detalleComision||[]);
       v.netoSinIva=p.netoSinIva;
     }
   }
