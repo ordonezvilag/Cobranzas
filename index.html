@@ -248,7 +248,19 @@ input,select,button,textarea{font-family:inherit}
   <!-- NUEVA VENTA -->
   <div id="sec-nueva" class="sec">
     <div class="card">
-      <p class="card-title">¿Qué querés cargar?</p>
+      <p class="card-title">1. Seleccioná el vendedor</p>
+      <div class="sel-grid col2">
+        <div class="sel-btn on" id="vend-guillermo" onclick="setVendedor('guillermo')">
+          <span class="lbl">Guillermo</span><span class="sub">5% sobre neto</span>
+        </div>
+        <div class="sel-btn" id="vend-juanmanuel" onclick="setVendedor('juanmanuel')">
+          <span class="lbl">Juan Manuel</span><span class="sub">5% / 6.5% según artículo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">2. ¿Qué querés cargar?</p>
       <div class="sel-grid col2">
         <div class="sel-btn on" id="orig-factura" onclick="setOrigen('factura')">
           <span class="ico">📄</span><span class="lbl">Factura / NC</span><span class="sub">PDF ZLibra — la IA detecta el tipo</span>
@@ -261,7 +273,7 @@ input,select,button,textarea{font-family:inherit}
       <div id="zona-pdf">
         <div class="upzone" id="dropzone" onclick="document.getElementById('pdf-file').click()">
           <input type="file" id="pdf-file" accept="application/pdf" onchange="procesarPDF(this)">
-          <p style="font-size:14px;color:#666" id="upzone-txt">Arrastrá o clickeá para subir la factura PDF</p>
+          <p style="font-size:14px;color:#666" id="upzone-txt">Arrastrá o clickeá para subir el PDF (factura o nota de crédito)</p>
           <p style="font-size:12px;color:#888;margin-top:4px">La IA extrae los datos automáticamente</p>
         </div>
         <p class="status" id="pdf-status"></p>
@@ -272,7 +284,7 @@ input,select,button,textarea{font-family:inherit}
     </div>
 
     <div class="card">
-      <p class="card-title" id="form-titulo">Datos de la venta</p>
+      <p class="card-title" id="form-titulo">3. Datos de la venta</p>
       <div id="aviso-nc" class="info-box-r" style="display:none">
         Esta nota de crédito restará del saldo pendiente del cliente y de la comisión del mes.
       </div>
@@ -297,20 +309,6 @@ input,select,button,textarea{font-family:inherit}
           <label id="lbl-monto">Monto total (USD)</label>
           <input type="number" id="f-monto" placeholder="0.00" step="0.01" oninput="actualizarHintComision()">
           <p class="hint" id="hint-monto">Total a Pagar con IVA</p>
-        </div>
-      </div>
-
-      <!-- VENDEDOR -->
-      <div class="fg">
-        <label style="margin-bottom:6px">Vendedor</label>
-        <div class="sel-grid col2">
-          <div class="sel-btn on" id="vend-guillermo" onclick="setVendedor('guillermo')">
-            <span class="lbl">Guillermo</span><span class="sub">5% sobre neto</span>
-          </div>
-          <div class="sel-btn" id="vend-juanmanuel" onclick="setVendedor('juanmanuel')">
-            <span class="lbl">Juan Manuel</span><span class="sub">5% / 6.5% según artículo</span>
-          </div>
-          <p class="hint" style="grid-column:1/-1;margin-top:4px">Seleccioná el vendedor <strong>antes</strong> de subir el PDF</p>
         </div>
       </div>
 
@@ -777,7 +775,26 @@ function limpiarForm(){
   el('f-fecha').value=hoy();
   el('cheques-list').innerHTML='';
   el('pdf-status').textContent='';
+  el('pdf-status').style.color='#666';
   G.chequeCont=0;G.pendingPDF=null;
+  // Reset tipo a factura
+  G.origen='factura';
+  ['factura','boleta'].forEach(o=>el('orig-'+o)&&el('orig-'+o).classList.toggle('on',o==='factura'));
+  el('zona-pdf').style.display='block';
+  el('zona-boleta').style.display='none';
+  el('bloque-pago').style.display='block';
+  el('aviso-nc').style.display='none';
+  el('fg-comision').style.display='none';
+  el('form-titulo').textContent='3. Datos de la venta';
+  el('btn-guardar').textContent='Guardar';
+  el('lbl-numero').textContent='N° Factura / NC';
+  el('f-numero').placeholder='A 3204';
+  // Reset pago a cheque
+  G.pago='cheque';G.plazo=25;
+  ['cheque','transf'].forEach(x=>el('pago-'+x)&&el('pago-'+x).classList.toggle('on',x==='cheque'));
+  el('bloque-cheques').style.display='block';
+  el('bloque-transf').style.display='none';
+  [25,50,70].forEach(p=>el('plazo-'+p)&&el('plazo-'+p).classList.toggle('on',p===25));
   actualizarPlazoPreview();
 }
 
@@ -939,10 +956,13 @@ function guardarVenta(){
 
   G.ventas.push(v);
   sheetAppend('ventas',VENTAS_HDR,ventaToRow(v));
+  const vendedorActual=G.vendedor; // guardar vendedor antes de limpiar
   limpiarForm();
-  alert(esNC?'Nota de crédito guardada':'Venta guardada');
-  showTab('alertas',document.querySelector('.tab'));
-  renderAlertas();
+  G.vendedor=vendedorActual; // restaurar vendedor
+  // Restaurar visual del botón vendedor
+  ['guillermo','juanmanuel'].forEach(x=>el('vend-'+x)&&el('vend-'+x).classList.toggle('on',x===vendedorActual));
+  el('pdf-status').textContent=esNC?'✓ Nota de crédito guardada correctamente.':'✓ Venta guardada correctamente.';
+  el('pdf-status').style.color='#3b6d11';
 }
 
 // ─────────────────────────────────────────────
@@ -1399,28 +1419,47 @@ function getRango(){
 }
 function renderVentas(){
   const{desde,hasta}=getRango();
+  // Ventas normales
   const filtradas=G.ventas.filter(v=>v.origen!=='nc'&&v.fecha>=desde&&v.fecha<=hasta);
-  const grupos={berad:{lbl:'Berad S.R.L.',items:[],total:0},gordin:{lbl:'Gordin S.R.L.',items:[],total:0},boleta:{lbl:'Boletas',items:[],total:0},otro:{lbl:'Sin clasificar',items:[],total:0}};
+  // NC del período
+  const ncs=G.ventas.filter(v=>v.origen==='nc'&&v.fecha>=desde&&v.fecha<=hasta);
+
+  const grupos={berad:{lbl:'Berad S.R.L.',items:[],total:0,nc:0},gordin:{lbl:'Gordin S.R.L.',items:[],total:0,nc:0},boleta:{lbl:'Boletas',items:[],total:0,nc:0},otro:{lbl:'Sin clasificar',items:[],total:0,nc:0}};
+
   filtradas.forEach(v=>{
     const e=(v.emisor||'').toUpperCase();
     const g=v.origen==='boleta'?'boleta':e.includes('BERAD')?'berad':e.includes('GORDIN')?'gordin':'otro';
     grupos[g].items.push(v);grupos[g].total+=v.monto;
   });
-  const total=filtradas.reduce((s,v)=>s+v.monto,0);
+  // Asignar NC al grupo correspondiente
+  ncs.forEach(v=>{
+    const e=(v.emisor||'').toUpperCase();
+    const g=e.includes('BERAD')?'berad':e.includes('GORDIN')?'gordin':'otro';
+    grupos[g].items.push(v);grupos[g].nc+=v.monto;grupos[g].total-=v.monto;
+  });
+
+  const totalBruto=filtradas.reduce((s,v)=>s+v.monto,0);
+  const totalNC=ncs.reduce((s,v)=>s+v.monto,0);
+  const total=totalBruto-totalNC;
+
   el('ventas-metrics').innerHTML=`
     <div class="metric"><p class="mlabel">Berad S.R.L.</p><p class="mval">$${fmtUSD(grupos.berad.total)}</p></div>
     <div class="metric"><p class="mlabel">Gordin S.R.L.</p><p class="mval">$${fmtUSD(grupos.gordin.total)}</p></div>
     <div class="metric"><p class="mlabel">Boletas</p><p class="mval">$${fmtUSD(grupos.boleta.total)}</p></div>
     <div class="metric" style="background:#f0f0f0;border:1px solid #d0d0d0"><p class="mlabel" style="font-weight:600">Total del período</p><p class="mval">$${fmtUSD(total)}</p></div>`;
+
   el('ventas-detalle').innerHTML=Object.entries(grupos).filter(([,g])=>g.items.length).map(([,g])=>{
-    const pct=total>0?((g.total/total)*100).toFixed(1):0;
-    const rows=g.items.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(v=>`
-      <div class="hrow">
-        <span style="font-size:13px">${v.origen==='boleta'?'Boleta':'Fac.'} ${v.numero||'—'} · ${v.cliente} · ${fmtFecha(v.fecha)}</span>
-        <span style="font-size:13px;font-weight:500;flex-shrink:0">USD $${fmtUSD(v.monto)}</span>
-      </div>`).join('');
-    return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.75rem"><p style="font-weight:600">${g.lbl}</p><div style="text-align:right"><p style="font-weight:600">USD $${fmtUSD(g.total)}</p><p style="font-size:11px;color:#888">${pct}% del total</p></div></div>${rows}</div>`;
-  }).join('')+(total>0?`<p style="text-align:right;font-size:13px;font-weight:500;color:#555;padding:8px 0">Total período: USD $${fmtUSD(total)}</p>`:'');
+    const neto=g.total;
+    const pct=totalBruto>0?((neto/totalBruto)*100).toFixed(1):0;
+    const rows=g.items.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(v=>{
+      const esNC=v.origen==='nc';
+      return`<div class="hrow">
+        <span style="font-size:13px;color:${esNC?'#a32d2d':'inherit'}">${esNC?'NC':'Fac.'} ${v.numero||'—'} · ${v.cliente} · ${fmtFecha(v.fecha)}${esNC?' <span style="font-size:11px">(nota de crédito)</span>':''}</span>
+        <span style="font-size:13px;font-weight:500;flex-shrink:0;color:${esNC?'#a32d2d':'inherit'}">${esNC?'−':''}USD $${fmtUSD(v.monto)}</span>
+      </div>`;
+    }).join('');
+    return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.75rem"><p style="font-weight:600">${g.lbl}</p><div style="text-align:right"><p style="font-weight:600">USD $${fmtUSD(neto)}</p>${g.nc>0?`<p style="font-size:11px;color:#a32d2d">−$${fmtUSD(g.nc)} en NC</p>`:''}<p style="font-size:11px;color:#888">${pct}% del bruto</p></div></div>${rows}</div>`;
+  }).join('')+(totalNC>0?`<p style="text-align:right;font-size:12px;color:#a32d2d;padding:4px 0">Notas de crédito: −USD $${fmtUSD(totalNC)}</p>`:'')+(total>=0?`<p style="text-align:right;font-size:13px;font-weight:500;color:#555;padding:4px 0">Total neto período: USD $${fmtUSD(total)}</p>`:'');
 }
 
 // ─────────────────────────────────────────────
